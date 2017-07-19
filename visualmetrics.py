@@ -32,12 +32,15 @@ import gzip
 import json
 import logging
 import math
+import numpy
 import os
 import platform
 import re
 import shutil
 import subprocess
 import tempfile
+
+from scipy.misc import imread
 
 # Globals
 options = None
@@ -1084,32 +1087,25 @@ def calculate_histograms(directory, histograms_file, force):
             'Histograms file {0} already exists'.format(histograms_file))
 
 
-def calculate_image_histogram(file):
-    logging.debug('Calculating histogram for ' + file)
+def calculate_image_histogram(filename):
+    logging.debug('Calculating histogram for ' + filename)
     try:
-        from PIL import Image
+        # Read in the image and enforce RGB format
+        im = imread(filename, mode='RGB')
 
-        im = Image.open(file)
-        width, height = im.size
-        pixels = im.load()
-        histogram = {'r': [0 for i in xrange(256)],
-                     'g': [0 for i in xrange(256)],
-                     'b': [0 for i in xrange(256)]}
-        for y in xrange(height):
-            for x in xrange(width):
-                try:
-                    pixel = pixels[x, y]
-                    # Don't include White pixels (with a tiny bit of slop for
-                    # compression artifacts)
-                    if pixel[0] < 250 or pixel[1] < 250 or pixel[2] < 250:
-                        histogram['r'][pixel[0]] += 1
-                        histogram['g'][pixel[1]] += 1
-                        histogram['b'][pixel[2]] += 1
-                except BaseException:
-                    pass
+        # Get only the non-white pixels for computing histograms
+        non_white_pixels = im[~numpy.all(im >= 250, 2), :]
+
+        # Compute a histogram for each of the color channels
+        histogram = {
+            'r': numpy.bincount(non_white_pixels[:,0], minlength=256).tolist(),
+            'g': numpy.bincount(non_white_pixels[:,1], minlength=256).tolist(),
+            'b': numpy.bincount(non_white_pixels[:,2], minlength=256).tolist(),
+        }
     except BaseException:
         histogram = None
-        logging.exception('Error calculating histogram for ' + file)
+        logging.exception('Error calculating histogram for ' + filename)
+
     return histogram
 
 
